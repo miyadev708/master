@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Stable Diff Tool Pro</title>
+    <style>
+        :root { --border: #d0d7de; --del: #ffeef0; --add: #e6ffed; --ln: #8c959f; --accent: #0078d4; }
+        body { font-family: sans-serif; margin: 20px; background: #f6f8fa; color: #24292f; padding-bottom: 100px; }
+        .editor-container { display: flex; gap: 20px; height: 400px; margin-bottom: 20px; }
+        .editor-box { flex: 1; position: relative; background: white; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; display: flex; }
+        .gutter { width: 50px; background: #fbfcfd; border-right: 1px solid #eee; padding: 10px 0; font-family: monospace; font-size: 12px; line-height: 1.5; color: var(--ln); text-align: right; padding-right: 8px; overflow: hidden; }
+        .viewport { flex: 1; position: relative; overflow: hidden; }
+        textarea, .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0; padding: 10px; box-sizing: border-box; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; white-space: pre; overflow: auto; border: none; }
+        textarea { z-index: 2; background: transparent; color: transparent; caret-color: #000; resize: none; outline: none; }
+        .overlay { z-index: 1; pointer-events: none; }
+        .row-del { background-color: var(--del); border-left: 3px solid #cf222e; }
+        .row-add { background-color: var(--add); border-left: 3px solid #2ea44f; }
+        .diff-log { background: white; border: 1px solid var(--border); border-radius: 6px; }
+        .diff-header { background: #24292f; color: white; padding: 8px 15px; font-size: 12px; font-weight: bold; display: flex; justify-content: space-between; }
+        .diff-list { font-family: 'Consolas', monospace; font-size: 11px; max-height: 300px; overflow-y: auto; }
+        .log-item { padding: 4px 15px; border-bottom: 1px solid #eee; display: flex; gap: 10px; }
+        .log-active { background: #fff9c4 !important; border-left: 4px solid #fbc02d; font-weight: bold; }
+        .nav-tooltip { position: fixed; bottom: 20px; right: 20px; background: white; border-radius: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; align-items: center; padding: 8px 15px; z-index: 100; gap: 10px; border: 1px solid #ddd; }
+        .nav-btn { background: var(--accent); color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+    </style>
+</head>
+<body>
+
+<div class="editor-container">
+    <div class="editor-box"><div id="lGut" class="gutter"></div><div class="viewport"><div id="lOv" class="overlay"></div><textarea id="lIn" spellcheck="false" oninput="update()" onscroll="sync('l')"></textarea></div></div>
+    <div class="editor-box"><div id="rGut" class="gutter"></div><div class="viewport"><div id="rOv" class="overlay"></div><textarea id="rIn" spellcheck="false" oninput="update()" onscroll="sync('r')"></textarea></div></div>
+</div>
+
+<div class="diff-log">
+    <div class="diff-header"><span>DIFFERENCE LOG (CHUNKS)</span><span id="saveLabel" style="font-weight:normal; font-size:10px; opacity:0.7;">Auto-saved</span></div>
+    <div id="diffList" class="diff-list"></div>
+</div>
+
+<div class="nav-tooltip">
+    <button class="nav-btn" onclick="jump(-1)">↑</button>
+    <div id="navInfo" style="font-size:12px; font-weight:bold; min-width:40px; text-align:center;">0/0</div>
+    <button class="nav-btn" onclick="jump(1)">↓</button>
+</div>
+
+<script>
+const lIn = document.getElementById('lIn'), rIn = document.getElementById('rIn');
+const lOv = document.getElementById('lOv'), rOv = document.getElementById('rOv');
+const lGut = document.getElementById('lGut'), rGut = document.getElementById('rGut');
+const log = document.getElementById('diffList'), navInfo = document.getElementById('navInfo');
+
+let chunks = [];
+let currentIdx = -1;
+
+// 起動時に保存内容を復元
+window.onload = () => {
+    lIn.value = localStorage.getItem('diff_left') || "";
+    rIn.value = localStorage.getItem('diff_right') || "";
+    update();
+};
+
+function sync(side) {
+    const src = side === 'l' ? lIn : rIn;
+    const tgt = side === 'l' ? rIn : lIn;
+    tgt.scrollTop = lOv.scrollTop = rOv.scrollTop = lGut.scrollTop = rGut.scrollTop = src.scrollTop;
+    tgt.scrollLeft = lOv.scrollLeft = rOv.scrollLeft = src.scrollLeft;
+}
+
+function update() {
+    const oldL = lIn.value.split('\n'), newL = rIn.value.split('\n');
+    localStorage.setItem('diff_left', lIn.value);
+    localStorage.setItem('diff_right', rIn.value);
+
+    let lH = "", rH = "", lG = "", rG = "";
+    chunks = [];
+    let i = 0, j = 0, row = 0;
+
+    // 高速な逐次比較アルゴリズム（ループ死を回避）
+    while (i < oldL.length || j < newL.length) {
+        const lineA = oldL[i], lineB = newL[j];
+        if (i < oldL.length && j < newL.length && lineA === lineB) {
+            lH += `<div>${esc(lineA) || ' '}</div>`; rH += `<div>${esc(lineB) || ' '}</div>`;
+            lG += `<div>${i+1}</div>`; rG += `<div>${j+1}</div>`;
+            i++; j++; row++;
+        } else {
+            let chunk = { startRow: row, details: [] };
+            // 変更箇所をまとめて処理
+            while ((i < oldL.length || j < newL.length) && (oldL[i] !== newL[j])) {
+                if (i < oldL.length) {
+                    lH += `<div class="row-del">${esc(oldL[i]) || ' '}</div>`;
+                    lG += `<div>${i+1}-</div>`;
+                    chunk.details.push(`<div class="log-item" style="background:#ffeef0">OLD:${i+1} | - ${esc(oldL[i])}</div>`);
+                    i++;
+                }
+                if (j < newL.length) {
+                    rH += `<div class="row-add">${esc(newL[j]) || ' '}</div>`;
+                    rG += `<div>${j+1}+</div>`;
+                    chunk.details.push(`<div class="log-item" style="background:#e6ffed">NEW:${j+1} | + ${esc(newL[j])}</div>`);
+                    j++;
+                }
+                if (!chunk.hasEmptyAdded) {
+                    if (i > oldL.length) rH += `<div> </div>`;
+                    if (j > newL.length) lH += `<div> </div>`;
+                }
+                row++;
+                if (row > 10000) break; // 無限ループガード
+            }
+            chunks.push(chunk);
+        }
+    }
+    lOv.innerHTML = lH; rOv.innerHTML = rH; lGut.innerHTML = lG; rGut.innerHTML = rG;
+    log.innerHTML = chunks.length ? chunks.map((c, idx) => `<div id="log-${idx}">${c.details.join('')}</div>`).join('') : '<div style="padding:20px;color:#888;text-align:center;">No changes</div>';
+    currentIdx = chunks.length > 0 ? 0 : -1;
+    navInfo.innerText = `${currentIdx + 1} / ${chunks.length}`;
+    sync('l');
+}
+
+function jump(dir) {
+    if (chunks.length === 0) return;
+    currentIdx = (currentIdx + dir + chunks.length) % chunks.length;
+    lIn.scrollTop = chunks[currentIdx].startRow * 19.5 - 50;
+    sync('l');
+    document.querySelectorAll('.log-item').forEach(el => el.classList.remove('log-active'));
+    const target = document.getElementById(`log-${currentIdx}`);
+    target.querySelectorAll('.log-item').forEach(el => el.classList.add('log-active'));
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    navInfo.innerText = `${currentIdx + 1} / ${chunks.length}`;
+}
+
+function esc(s) { return s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ""; }
+</script>
+</body>
+</html>
