@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>マイ資産ヒートマップ</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f9f9f9; }
+        #chart_div { width: 95vw; height: 80vh; min-height: 500px; margin-top: 20px; border: 1px solid #ccc; }
+        h1 { font-size: 1.5rem; color: #333; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>保有銘柄ヒートマップ</h1>
+    <div id="chart_div"></div>
+    <p>※面積＝保有数 / 色＝ダミーの騰落イメージ</p>
+
+    <!-- ライブラリの読み込み。この読み込みが終わってから下のスクリプトが動くようにする -->
+    <script type="text/javascript" src="https://www.gstatic.com"></script>
+    
+    <script type="text/javascript">
+      // googleオブジェクトが存在するか確認してからロードを開始する
+      if (typeof google !== 'undefined') {
+          google.charts.load('current', {'packages':['treemap'], 'language': 'ja'});
+          google.charts.setOnLoadCallback(drawChart);
+      } else {
+          document.getElementById('chart_div').innerHTML = "ライブラリの読み込みに失敗しました。ネット接続を確認してください。";
+      }
+
+      function drawChart() {
+        var data = google.visualization.arrayToDataTable([
+          ['銘柄', '親', '保有数', '騰落（ダミー）'],
+          ['Total', null, 0, 0],
+          ['池田泉州 (8714)', 'Total', 2000, 10],
+          ['三菱UFJ (8306)', 'Total', 300, 2],
+          ['日本航空 (9201)', 'Total', 100, -5],
+          ['日本製鉄 (5401)', 'Total', 500, -10],
+          ['ダスキン (4665)', 'Total', 100, 5],
+          ['阪急阪神 (9042)', 'Total', 100, 3],
+          ['ソフトバンク (9434)', 'Total', 1500, 8],
+          ['NTT (9432)', 'Total', 1000, 1],
+          ['ケンタッキー (2764)', 'Total', 500, 4],
+          ['マツキヨココカラ (3088)', 'Total', 100, -2],
+          ['DDグループ (3053)', 'Total', 500, 6],
+          ['パルHD (2726)', 'Total', 100, 2]
+        ]);
+
+        var tree = new google.visualization.TreeMap(document.getElementById('chart_div'));
+
+        tree.draw(data, {
+          minColor: '#f00',   // 下落：赤
+          midColor: '#ddd',   // 変化なし：グレー
+          maxColor: '#0d0',   // 上昇：緑
+          headerHeight: 20,
+          fontColor: 'black',
+          showScale: true,
+          fontSize: 14,
+          title: '保有数ヒートマップ'
+        });
+      }
+    </script>
+</body>
+</html>
