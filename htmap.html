@@ -2,61 +2,92 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>マイ資産ヒートマップ</title>
+    <title>マイ資産ヒートマップ 2026完結版</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f9f9f9; }
-        #chart_div { width: 95vw; height: 80vh; min-height: 500px; margin-top: 20px; border: 1px solid #ccc; }
-        h1 { font-size: 1.5rem; color: #333; margin-top: 20px; }
+        body { font-family: sans-serif; background: #000; color: #fff; margin: 0; padding: 20px; }
+        h1 { font-size: 1.2rem; text-align: center; margin-bottom: 5px; }
+        .summary { text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px; }
+        #chart-container {
+            width: 95vw; height: 75vh; margin: 0 auto;
+            position: relative; border: 1px solid #333; background: #000;
+        }
+        .node {
+            position: absolute; border: 0.5px solid #000; overflow: hidden;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: 0.2s; cursor: pointer; background-color: #26a69a;
+        }
+        .node:hover { outline: 2px solid #fff; z-index: 10; filter: brightness(1.2); }
+        .label-name { font-weight: bold; font-size: 13px; text-shadow: 1px 1px 2px #000; text-align: center; }
+        .label-val { font-size: 10px; margin-top: 2px; opacity: 0.9; }
     </style>
 </head>
 <body>
-    <h1>保有銘柄ヒートマップ</h1>
-    <div id="chart_div"></div>
-    <p>※面積＝保有数 / 色＝ダミーの騰落イメージ</p>
 
-    <!-- ライブラリの読み込み。この読み込みが終わってから下のスクリプトが動くようにする -->
-    <script type="text/javascript" src="https://www.gstatic.com"></script>
-    
-    <script type="text/javascript">
-      // googleオブジェクトが存在するか確認してからロードを開始する
-      if (typeof google !== 'undefined') {
-          google.charts.load('current', {'packages':['treemap'], 'language': 'ja'});
-          google.charts.setOnLoadCallback(drawChart);
-      } else {
-          document.getElementById('chart_div').innerHTML = "ライブラリの読み込みに失敗しました。ネット接続を確認してください。";
-      }
+    <h1>マイ資産ヒートマップ</h1>
+    <div class="summary" id="total-summary">算出中...</div>
+    <div id="chart-container"></div>
 
-      function drawChart() {
-        var data = google.visualization.arrayToDataTable([
-          ['銘柄', '親', '保有数', '騰落（ダミー）'],
-          ['Total', null, 0, 0],
-          ['池田泉州 (8714)', 'Total', 2000, 10],
-          ['三菱UFJ (8306)', 'Total', 300, 2],
-          ['日本航空 (9201)', 'Total', 100, -5],
-          ['日本製鉄 (5401)', 'Total', 500, -10],
-          ['ダスキン (4665)', 'Total', 100, 5],
-          ['阪急阪神 (9042)', 'Total', 100, 3],
-          ['ソフトバンク (9434)', 'Total', 1500, 8],
-          ['NTT (9432)', 'Total', 1000, 1],
-          ['ケンタッキー (2764)', 'Total', 500, 4],
-          ['マツキヨココカラ (3088)', 'Total', 100, -2],
-          ['DDグループ (3053)', 'Total', 500, 6],
-          ['パルHD (2726)', 'Total', 100, 2]
-        ]);
+    <script>
+        const stocks = [
+            { id: "8714", name: "池田泉州", count: 2000, price: 921 },
+            { id: "8306", name: "三菱UFJ",  count: 300,  price: 3003 },
+            { id: "9201", name: "JAL",      count: 100,  price: 3107 },
+            { id: "5401", name: "日本製鉄", count: 500,  price: 648 },
+            { id: "4665", name: "ダスキン", count: 100,  price: 4307 },
+            { id: "9042", name: "阪急阪神", count: 100,  price: 4622 },
+            { id: "9434", name: "SB",       count: 1500, price: 214 },
+            { id: "9432", name: "NTT",      count: 1000, price: 155 },
+            { id: "2764", name: "ひらまつ", count: 500,  price: 250 },
+            { id: "3088", name: "マツキヨ", count: 100,  price: 2450 },
+            { id: "3053", name: "ペッパー", count: 500,  price: 135 },
+            { id: "2726", name: "パルHD",   count: 100,  price: 3100 }
+        ];
 
-        var tree = new google.visualization.TreeMap(document.getElementById('chart_div'));
+        function draw() {
+            const container = document.getElementById('chart-container');
+            container.innerHTML = '';
+            
+            let data = stocks.map(s => ({ ...s, mVal: s.count * s.price }));
+            data.sort((a, b) => b.mVal - a.mVal);
 
-        tree.draw(data, {
-          minColor: '#f00',   // 下落：赤
-          midColor: '#ddd',   // 変化なし：グレー
-          maxColor: '#0d0',   // 上昇：緑
-          headerHeight: 20,
-          fontColor: 'black',
-          showScale: true,
-          fontSize: 14,
-          title: '保有数ヒートマップ'
-        });
-      }
+            const total = data.reduce((sum, s) => sum + s.mVal, 0);
+            document.getElementById('total-summary').innerText = `総評価額：約 ${(total/10000).toFixed(1)} 万円`;
+
+            let x = 0, y = 0, w = container.clientWidth, h = container.clientHeight;
+
+            data.forEach((d, i) => {
+                const node = document.createElement('div');
+                node.className = 'node';
+                
+                // URLの組み立てを修正（最後にスラッシュを入れるのが確実）
+                const url = "https://finance.yahoo.co.jp" + d.id + ".T/";
+                node.onclick = () => window.open(url, '_blank');
+
+                const remainingDataTotal = data.slice(i).reduce((s, v) => s + v.mVal, 0);
+                const ratio = d.mVal / remainingDataTotal;
+
+                if (w > h) {
+                    let nw = w * ratio;
+                    node.style.left = x + 'px'; node.style.top = y + 'px';
+                    node.style.width = nw + 'px'; node.style.height = h + 'px';
+                    x += nw; w -= nw;
+                } else {
+                    let nh = h * ratio;
+                    node.style.left = x + 'px'; node.style.top = y + 'px';
+                    node.style.width = w + 'px'; node.style.height = nh + 'px';
+                    y += nh; h -= nh;
+                }
+
+                if (d.mVal / total > 0.03) {
+                    node.innerHTML = `<span class="label-name">${d.name}</span><span class="label-val">¥${(d.mVal/10000).toFixed(1)}万</span>`;
+                } else {
+                    node.innerHTML = `<span style="font-size:9px">${d.name}</span>`;
+                }
+                container.appendChild(node);
+            });
+        }
+        window.onload = draw;
+        window.onresize = draw;
     </script>
 </body>
 </html>
